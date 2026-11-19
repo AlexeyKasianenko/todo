@@ -1,0 +1,61 @@
+class TasksController < ApplicationController
+  before_action :set_task, only: %i[show update destroy]
+
+  def index
+    tasks = Current.user.tasks.order(created_at: :desc, id: :desc)
+
+    if params[:status].present?
+      return render_invalid_status unless Task.statuses.key?(params[:status])
+
+      tasks = tasks.where(status: params[:status])
+    end
+
+    render json: tasks.map { |task| serialize(task) }
+  end
+
+  def show
+    render json: serialize(@task)
+  end
+
+  def create
+    task = Current.user.tasks.new(task_params)
+
+    if task.save
+      render json: serialize(task), status: :created
+    else
+      render json: { errors: task.errors }, status: :unprocessable_content
+    end
+  end
+
+  def update
+    if @task.update(task_params)
+      render json: serialize(@task)
+    else
+      render json: { errors: @task.errors }, status: :unprocessable_content
+    end
+  end
+
+  def destroy
+    @task.destroy!
+    head :no_content
+  end
+
+  private
+    def set_task
+      @task = Current.user.tasks.find_by(id: params[:id])
+      render json: { error: "Not found" }, status: :not_found unless @task
+    end
+
+    def task_params
+      params.expect(task: %i[title status note])
+    end
+
+    def serialize(task)
+      task.as_json(only: %i[id title status note created_at updated_at])
+    end
+
+    def render_invalid_status
+      render json: { errors: { status: [ "must be one of: #{Task.statuses.keys.join(', ')}" ] } },
+             status: :unprocessable_content
+    end
+end
