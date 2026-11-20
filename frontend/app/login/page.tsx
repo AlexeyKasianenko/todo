@@ -1,11 +1,13 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
+import NextLink from "next/link";
 import { useRouter } from "next/navigation";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Container from "@mui/material/Container";
+import Link from "@mui/material/Link";
 import Paper from "@mui/material/Paper";
 import Snackbar from "@mui/material/Snackbar";
 import TextField from "@mui/material/TextField";
@@ -89,6 +91,12 @@ export default function LoginPage() {
           >
             {pending ? "Logging in…" : "Login"}
           </Button>
+          <Typography variant="body2" align="center" sx={{ mt: 2 }}>
+            No account?{" "}
+            <Link component={NextLink} href="/register">
+              Sign up
+            </Link>
+          </Typography>
         </Box>
       </Paper>
 
