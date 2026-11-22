@@ -7,3 +7,13 @@
 #   ["Action", "Comedy", "Drama", "Horror"].each do |genre_name|
 #     MovieGenre.find_or_create_by!(name: genre_name)
 #   end
+
+user = User.find_or_create_by!(email_address: "admin@example.com") do |user|
+  user.password = "password1"
+  user.password_confirmation = "password1"
+end
+
+(1..100).to_a.each do |i|
+  status = [ :pending, :in_progress, :done ].sample
+  user.tasks.find_or_create_by!(title: "Task #{i}", note: "Task note #{i}", status: status)
+end
