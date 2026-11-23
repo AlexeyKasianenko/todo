@@ -3,22 +3,21 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Alert from "@mui/material/Alert";
+import Pagination from "@mui/material/Pagination";
 import Snackbar from "@mui/material/Snackbar";
-import { ApiError, tasksApi, type Task, type TaskStatus } from "@/lib/api";
+import { ApiError, TASKS_PER_PAGE, tasksApi, type Task, type TaskStatus } from "@/lib/api";
 import NewTaskForm from "./NewTaskForm";
 import TaskFilter, { type Filter } from "./TaskFilter";
 import TaskItem from "./TaskItem";
 import styles from "./tasks.module.css";
 
-function matchesFilter(task: Task, filter: Filter) {
-  if (filter === "all") return true;
-  return filter === "done" ? task.status === "done" : task.status !== "done";
-}
-
 export default function TaskBoard() {
   const router = useRouter();
   const [tasks, setTasks] = useState<Task[] | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
+  const [page, setPage] = useState(1);
+  const [counts, setCounts] = useState({ total: 0, all: 0, done: 0 });
+  const [reloadKey, setReloadKey] = useState(0);
   const [openId, setOpenId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -31,26 +30,51 @@ export default function TaskBoard() {
   }
 
   useEffect(() => {
+    let cancelled = false;
     tasksApi
-      .list()
-      .then(setTasks)
+      .list({ pageNum: page, filter })
+      .then((result) => {
+        if (cancelled) return;
+        if (result.tasks.length === 0 && page > 1) {
+          setPage(page - 1);
+          return;
+        }
+        setTasks(result.tasks);
+        setCounts({ total: result.totalCount, all: result.allCount, done: result.doneCount });
+      })
       .catch((e: unknown) => {
-        setTasks([]);
+        if (cancelled) return;
+        setTasks((prev) => prev ?? []);
         showError(e);
       });
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [page, filter, reloadKey]);
+
+  function changeFilter(f: Filter) {
+    setFilter(f);
+    setPage(1);
+  }
 
   const replaceTask = (updated: Task) =>
     setTasks((prev) => prev?.map((t) => (t.id === updated.id ? updated : t)) ?? prev);
 
   // Optimistic update with rollback on failure.
   async function updateTask(task: Task, patch: Partial<Pick<Task, "status" | "note">>) {
+    const delta =
+      patch.status === undefined
+        ? 0
+        : Number(patch.status === "done") - Number(task.status === "done");
+    const adjustDone = (d: number) => setCounts((c) => ({ ...c, done: c.done + d }));
     replaceTask({ ...task, ...patch });
+    adjustDone(delta);
     try {
       replaceTask(await tasksApi.update(task.id, patch));
     } catch (e) {
       replaceTask(task);
+      adjustDone(-delta);
       showError(e);
     }
   }
@@ -58,9 +82,10 @@ export default function TaskBoard() {
   async function addTask(title: string) {
     try {
       const task = await tasksApi.create(title);
-      setTasks((prev) => [task, ...(prev ?? [])]);
-      setOpenId(task.id);
       if (filter === "done") setFilter("all");
+      setPage(1);
+      setReloadKey((k) => k + 1);
+      setOpenId(task.id);
       return true;
     } catch (e) {
       showError(e);
@@ -74,15 +99,14 @@ export default function TaskBoard() {
     setOpenId(null);
     try {
       await tasksApi.remove(task.id);
+      setReloadKey((k) => k + 1);
     } catch (e) {
       setTasks(previous);
       showError(e);
     }
   }
 
-  const all = tasks ?? [];
-  const doneCount = all.filter((t) => t.status === "done").length;
-  const visible = all.filter((t) => matchesFilter(t, filter));
+  const pageCount = Math.ceil(counts.total / TASKS_PER_PAGE);
 
   return (
     <div className={styles.page}>
@@ -91,10 +115,10 @@ export default function TaskBoard() {
           <div className={styles.heading}>
             <h1 className={styles.title}>Today</h1>
             <p className={styles.summary}>
-              {tasks === null ? "Loading…" : `${doneCount} of ${all.length} done`}
+              {tasks === null ? "Loading…" : `${counts.done} of ${counts.all} done`}
             </p>
           </div>
-          <TaskFilter value={filter} onChange={setFilter} />
+          <TaskFilter value={filter} onChange={changeFilter} />
         </header>
 
         <NewTaskForm onAdd={addTask} />
@@ -102,7 +126,7 @@ export default function TaskBoard() {
         {tasks !== null && (
           <>
             <ul className={styles.list}>
-              {visible.map((task) => (
+              {tasks.map((task) => (
                 <TaskItem
                   key={task.id}
                   task={task}
@@ -119,7 +143,13 @@ export default function TaskBoard() {
               ))}
             </ul>
 
-            {visible.length === 0 && (
+            {pageCount > 1 && (
+              <div className={styles.pagination}>
+                <Pagination count={pageCount} page={page} onChange={(_, p) => setPage(p)} />
+              </div>
+            )}
+
+            {tasks.length === 0 && (
               <p className={styles.empty}>
                 {filter === "done" ? "Nothing completed yet." : "All clear. Add a task above."}
               </p>

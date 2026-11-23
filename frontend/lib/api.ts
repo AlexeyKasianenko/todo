@@ -1,4 +1,5 @@
 import { API_URL, clearSession, getToken } from "@/lib/auth";
+import type { Filter } from "@/components/tasks/TaskFilter";
 
 export type TaskStatus = "pending" | "in_progress" | "done";
 
@@ -11,13 +12,22 @@ export interface Task {
   updated_at: string;
 }
 
+export const TASKS_PER_PAGE = 10;
+
+export interface TaskPage {
+  tasks: Task[];
+  totalCount: number;
+  allCount: number;
+  doneCount: number;
+}
+
 export class ApiError extends Error {
   constructor(message: string, public status: number) {
     super(message);
   }
 }
 
-async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+async function send(path: string, init: RequestInit = {}): Promise<Response> {
   const token = getToken();
   const response = await fetch(`${API_URL}${path}`, {
     ...init,
@@ -47,11 +57,27 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     throw new ApiError(message, response.status);
   }
 
+  return response;
+}
+
+async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const response = await send(path, init);
   return response.status === 204 ? (undefined as T) : response.json();
 }
 
+const countHeader = (response: Response, name: string) =>
+  Number(response.headers.get(name)) || 0;
+
 export const tasksApi = {
-  list: () => request<Task[]>("/tasks"),
+  list: async ({ pageNum, filter }: { pageNum: number; filter: Filter }): Promise<TaskPage> => {
+    const response = await send(`/tasks?page_num=${pageNum}&filter=${filter}`);
+    return {
+      tasks: await response.json(),
+      totalCount: countHeader(response, "X-Total-Count"),
+      allCount: countHeader(response, "X-All-Count"),
+      doneCount: countHeader(response, "X-Done-Count"),
+    };
+  },
   create: (title: string) =>
     request<Task>("/tasks", { method: "POST", body: JSON.stringify({ task: { title } }) }),
   update: (id: number, task: Partial<Pick<Task, "title" | "status" | "note">>) =>
