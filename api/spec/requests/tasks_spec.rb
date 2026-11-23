@@ -44,6 +44,71 @@ RSpec.describe "Tasks", type: :request do
       expect(response).to have_http_status(:unprocessable_content)
       expect(json["errors"]).to have_key("status")
     end
+
+    context "filter" do
+      it "open returns not-done tasks" do
+        get tasks_path(filter: "open"), headers: headers, as: :json
+        expect(json.map { |t| t["id"] }).to eq([ newer.id ])
+        expect(response.headers["X-Total-Count"]).to eq("1")
+      end
+
+      it "done returns done tasks" do
+        get tasks_path(filter: "done"), headers: headers, as: :json
+        expect(json.map { |t| t["id"] }).to eq([ older.id ])
+      end
+
+      it "combines with status" do
+        get tasks_path(filter: "open", status: "done"), headers: headers, as: :json
+        expect(response).to have_http_status(:ok)
+        expect(json).to eq([])
+      end
+
+      it "returns 422 for an unknown filter" do
+        get tasks_path(filter: "archived"), headers: headers, as: :json
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(json["errors"]).to have_key("filter")
+      end
+    end
+
+    it "sets unfiltered X-All-Count and X-Done-Count for the current user" do
+      get tasks_path(filter: "open"), headers: headers, as: :json
+      expect(response.headers["X-All-Count"]).to eq("2")
+      expect(response.headers["X-Done-Count"]).to eq("1")
+    end
+
+    context "pagination" do
+      before { stub_const("TasksController::PER_PAGE", 1) }
+
+      it "returns the first page by default" do
+        get tasks_path, headers: headers, as: :json
+        expect(json.map { |t| t["id"] }).to eq([ newer.id ])
+      end
+
+      it "returns the requested page" do
+        get tasks_path(page_num: 2), headers: headers, as: :json
+        expect(json.map { |t| t["id"] }).to eq([ older.id ])
+      end
+
+      it "returns an empty list past the last page" do
+        get tasks_path(page_num: 3), headers: headers, as: :json
+        expect(json).to eq([])
+      end
+
+      it "sets X-Total-Count to the unpaginated count" do
+        get tasks_path(page_num: 2), headers: headers, as: :json
+        expect(response.headers["X-Total-Count"]).to eq("2")
+      end
+
+      it "counts only filtered tasks in X-Total-Count" do
+        get tasks_path(status: "done"), headers: headers, as: :json
+        expect(response.headers["X-Total-Count"]).to eq("1")
+      end
+
+      it "treats invalid page_num as page 1" do
+        get tasks_path(page_num: "abc"), headers: headers, as: :json
+        expect(json.map { |t| t["id"] }).to eq([ newer.id ])
+      end
+    end
   end
 
   describe "GET /tasks/:id" do

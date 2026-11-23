@@ -1,4 +1,7 @@
 class TasksController < ApplicationController
+  PER_PAGE = 10
+  FILTERS = %w[all open done].freeze
+
   before_action :set_task, only: %i[show update destroy]
 
   def index
@@ -7,8 +10,19 @@ class TasksController < ApplicationController
     if params[:status].present?
       return render_invalid_status unless Task.statuses.key?(params[:status])
 
-      tasks = tasks.where(status: params[:status])
+      tasks = tasks.with_status(params[:status])
     end
+
+    if params[:filter].present?
+      return render_invalid_filter unless FILTERS.include?(params[:filter])
+
+      tasks = tasks.with_filter(params[:filter])
+    end
+
+    response.headers["X-All-Count"] = Current.user.tasks.count.to_s
+    response.headers["X-Done-Count"] = Current.user.tasks.done.count.to_s
+    response.headers["X-Total-Count"] = tasks.count.to_s
+    tasks = tasks.limit(PER_PAGE).offset((page_num - 1) * PER_PAGE)
 
     render json: tasks.map { |task| serialize(task) }
   end
@@ -46,12 +60,21 @@ class TasksController < ApplicationController
       render json: { error: "Not found" }, status: :not_found unless @task
     end
 
+    def page_num
+      [ params[:page_num].to_i, 1 ].max
+    end
+
     def task_params
       params.expect(task: %i[title status note])
     end
 
     def serialize(task)
       task.as_json(only: %i[id title status note created_at updated_at])
+    end
+
+    def render_invalid_filter
+      render json: { errors: { filter: [ "must be one of: #{FILTERS.join(', ')}" ] } },
+             status: :unprocessable_content
     end
 
     def render_invalid_status
