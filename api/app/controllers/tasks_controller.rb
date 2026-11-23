@@ -7,12 +7,6 @@ class TasksController < ApplicationController
   def index
     tasks = Current.user.tasks.order(created_at: :desc, id: :desc)
 
-    if params[:status].present?
-      return render_invalid_status unless Task.statuses.key?(params[:status])
-
-      tasks = tasks.with_status(params[:status])
-    end
-
     if params[:filter].present?
       return render_invalid_filter unless FILTERS.include?(params[:filter])
 
@@ -61,7 +55,7 @@ class TasksController < ApplicationController
     end
 
     def page_num
-      [ params[:page_num].to_i, 1 ].max
+      params[:page_num].to_i.clamp(1, 1_000_000)
     end
 
     def task_params

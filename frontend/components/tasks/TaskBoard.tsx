@@ -1,13 +1,20 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Alert from "@mui/material/Alert";
 import Pagination from "@mui/material/Pagination";
 import Snackbar from "@mui/material/Snackbar";
-import { ApiError, TASKS_PER_PAGE, tasksApi, type Task, type TaskStatus } from "@/lib/api";
+import {
+  ApiError,
+  TASKS_PER_PAGE,
+  tasksApi,
+  type Filter,
+  type Task,
+  type TaskStatus,
+} from "@/lib/api";
 import NewTaskForm from "./NewTaskForm";
-import TaskFilter, { type Filter } from "./TaskFilter";
+import TaskFilter from "./TaskFilter";
 import TaskItem from "./TaskItem";
 import styles from "./tasks.module.css";
 
@@ -18,6 +25,7 @@ export default function TaskBoard() {
   const [page, setPage] = useState(1);
   const [counts, setCounts] = useState({ total: 0, all: 0, done: 0 });
   const [reloadKey, setReloadKey] = useState(0);
+  const lastLoaded = useRef<{ page: number; filter: Filter }>({ page: 1, filter: "all" });
   const [openId, setOpenId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -36,15 +44,22 @@ export default function TaskBoard() {
       .then((result) => {
         if (cancelled) return;
         if (result.tasks.length === 0 && page > 1) {
-          setPage(page - 1);
-          return;
+          const lastPage = Math.max(1, Math.ceil(result.totalCount / TASKS_PER_PAGE));
+          if (lastPage < page) {
+            setPage(lastPage);
+            return;
+          }
         }
+        lastLoaded.current = { page, filter };
         setTasks(result.tasks);
         setCounts({ total: result.totalCount, all: result.allCount, done: result.doneCount });
       })
       .catch((e: unknown) => {
         if (cancelled) return;
         setTasks((prev) => prev ?? []);
+        // Roll the selection back to what is actually on screen.
+        setPage(lastLoaded.current.page);
+        setFilter(lastLoaded.current.filter);
         showError(e);
       });
     return () => {

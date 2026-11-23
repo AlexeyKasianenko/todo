@@ -1,5 +1,6 @@
 import { API_URL, clearSession, getToken } from "@/lib/auth";
-import type { Filter } from "@/components/tasks/TaskFilter";
+
+export type Filter = "all" | "open" | "done";
 
 export type TaskStatus = "pending" | "in_progress" | "done";
 

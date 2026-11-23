@@ -1,6 +1,5 @@
+import type { Filter } from "@/lib/api";
 import styles from "./tasks.module.css";
-
-export type Filter = "all" | "open" | "done";
 
 const OPTIONS: { id: Filter; label: string }[] = [
   { id: "all", label: "All" },

@@ -34,17 +34,6 @@ RSpec.describe "Tasks", type: :request do
       expect(json.map { |t| t["id"] }).to eq([ newer.id, older.id ])
     end
 
-    it "filters by status" do
-      get tasks_path(status: "done"), headers: headers, as: :json
-      expect(json.map { |t| t["id"] }).to eq([ older.id ])
-    end
-
-    it "returns 422 for an unknown status" do
-      get tasks_path(status: "archived"), headers: headers, as: :json
-      expect(response).to have_http_status(:unprocessable_content)
-      expect(json["errors"]).to have_key("status")
-    end
-
     context "filter" do
       it "open returns not-done tasks" do
         get tasks_path(filter: "open"), headers: headers, as: :json
@@ -55,12 +44,6 @@ RSpec.describe "Tasks", type: :request do
       it "done returns done tasks" do
         get tasks_path(filter: "done"), headers: headers, as: :json
         expect(json.map { |t| t["id"] }).to eq([ older.id ])
-      end
-
-      it "combines with status" do
-        get tasks_path(filter: "open", status: "done"), headers: headers, as: :json
-        expect(response).to have_http_status(:ok)
-        expect(json).to eq([])
       end
 
       it "returns 422 for an unknown filter" do
@@ -100,13 +83,28 @@ RSpec.describe "Tasks", type: :request do
       end
 
       it "counts only filtered tasks in X-Total-Count" do
-        get tasks_path(status: "done"), headers: headers, as: :json
+        get tasks_path(filter: "done"), headers: headers, as: :json
         expect(response.headers["X-Total-Count"]).to eq("1")
       end
 
       it "treats invalid page_num as page 1" do
         get tasks_path(page_num: "abc"), headers: headers, as: :json
         expect(json.map { |t| t["id"] }).to eq([ newer.id ])
+      end
+
+      it "returns an empty list for a huge page_num" do
+        get tasks_path(page_num: "99999999999999999999"), headers: headers, as: :json
+        expect(response).to have_http_status(:ok)
+        expect(json).to eq([])
+      end
+
+      it "paginates within the filtered set" do
+        get tasks_path(filter: "open", page_num: 1), headers: headers, as: :json
+        expect(json.map { |t| t["id"] }).to eq([ newer.id ])
+
+        get tasks_path(filter: "open", page_num: 2), headers: headers, as: :json
+        expect(json).to eq([])
+        expect(response.headers["X-Total-Count"]).to eq("1")
       end
     end
   end
